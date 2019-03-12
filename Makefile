@@ -18,7 +18,8 @@ endif
 
 ### Go Compiler
 GOCC       = go build
-DEFGOFLAGS = -ldflags '-s -w'
+BUILDFLAGS = -ldflags '-s -w'
+DEBUGFLAGS =
 
 ### Common Commands
 SHELL      = /bin/bash
@@ -60,7 +61,7 @@ EEECHO     = printf
 endif
 
 ### Export Settings
-export GOCC DEFGOFLAGS SHELL PRINT _OS RM ECHO EECHO EEECHO MKDIR LN CP MV
+export GOCC DEFGOFLAGS SHELL PRINT _OS RM ECHO EECHO EEECHO MKDIR LN CP MV DEBUGFLAGS BUILDFLAGS
 
 ### Current Project (get from dirname, ensure all lowercase)
 Name = $(shell basename $(CURDIR)| tr '[:upper:]' '[:lower:]')
@@ -72,23 +73,12 @@ else
 G_Name   = $(Name)
 endif
 
-### Vendor Location
-Lib       = $(CURDIR)/lib
-
 ### Build folders
-Build     = $(CURDIR)/build
-Bin       = $(Build)/bin
-Src       = $(Build)/src
-
-### Go Flags
-GoFlags  = $(DEFGOFLAGS)
+Bin       = $(CURDIR)/bin
+Src       = $(CURDIR)/game
 
 ### Export Current Project
-export Name G_Name Build Bin Src Lib GoFlags
-
-### Finally, set the GOPATH
-export GOPATH = $(Lib):$(shell printenv GOPATH)
-export GOBIN  = $(Lib)/bin:$(shell printenv GOBIN)
+export Name G_Name Build Bin Src Lib
 
 ## Include optional Makefiles if they exist
 -include Makefile.install
@@ -98,7 +88,7 @@ export GOBIN  = $(Lib)/bin:$(shell printenv GOBIN)
 ## Force Default
 .DEFAULT_GOAL := default
 ## Define specifc targets
-.PHONY: default help help-data help-install help-custom index build build-debug exec clean
+.PHONY: default help help-data help-install help-custom build build-debug exec clean
 
 ## Default to show help
 default: help
@@ -123,33 +113,22 @@ help-data:
 	@$(PRINT) "   build\t\tBuild $(Name) with:\n\t\t\t  $(GOCC) $(GoFlags) -tags release $(GOTAGS)\n"
 	@$(PRINT) "   build-debug\t\tBuild debug $(Name) with\n\t\t\t  $(GOCC) $(GoFlags) -tags debug $(GOTAGS)\n"
 	@$(PRINT) "   clean\t\tDelete files made for build\n"
-	@$(PRINT) "   vendor\t\tGo get files for vendoring in project\n"
 	@$(PRINT) "   set-verbosity\tSet the verbosity of the build process\n"
-
-## Setup the build directory for the Go project
-### Called By:  build, run
-index:
-	@$(ECHO) "\n## $(Name) Index\n#####\n"
-	@$(EEECHO) "## Linking $(Name) source\n"
-	@$(MKDIR) $(Src)
-	@$(eval GoSource := $(shell find 'source' -type f -name '*.go' -printf '$(CURDIR)/source/%P\n'))
-	@$(foreach o, $(GoSource), $(LN) $(o) $(Src);)
-	@$(ECHO) "## Done\n#####\n"
 
 ## Build the release project
 ### Called By:  run
-build: index
+build:
 	@$(ECHO) "\n## $(Name) Build\n#####\n"
 	@$(EEECHO) "## Changing Directory: $(Src)\n### Running: $(GOCC) $(GoFlags) -tags release $(GOTAG) -o $(Bin)/$(G_Name)\n"
-	@cd $(Src) && $(GOCC) $(GoFlags) -tags release -o $(Bin)/$(G_Name)
+	@cd $(Src) && $(GOCC) $(BUILDFLAGS) -tags release -o $(Bin)/$(G_Name)
 	@$(ECHO) "## Done\n#####\n"
 
 ## Build the debug project
 ### Called By:  test
-build-debug: index
+build-debug:
 	@$(ECHO) "\n## $(Name) Debug\n#####\n"
-	@$(EEECHO) "## Changing Directory: $(Src)\n### Running: $(GOCC) $(GoFlags) -tags debug $(GOTAG) -o $(Bin)/$(G_Name)\n"
-	@cd $(Src) && $(GOCC) $(GoFlags) -tags debug -o $(Bin)/$(G_Name)
+	@$(EEECHO) "## Changing Directory: $(Src)\n### Running: $(GOCC) $(DEBUGFLAGS) -tags debug $(GOTAG) -o $(Bin)/$(G_Name)\n"
+	@cd $(Src) && $(GOCC) $(DEBUGFLAGS) -tags debug -o $(Bin)/$(G_Name)
 	@$(ECHO) "## Done\n#####\n"
 
 ## Shortcut to run the debug build
@@ -175,12 +154,12 @@ exec:
 ### Called By:  run, test
 clean::
 	@$(ECHO) "\n## $(Name) Clean\n#####\n"
-	@if [ ! -d $(Build) ]; then \
+	@if [ ! -d $(Bin) ]; then \
 		$(PRINT) "Error:  $(Name) is not built\n"; \
 		$(PRINT) "   Nothing to clean\n"; \
 	else \
-		$(EEECHO) "## Removing build folder at: $(Build)\n"; \
-		$(RM) $(Build); \
+		$(EEECHO) "## Removing build folder at: $(Bin)\n"; \
+		$(RM) $(Bin); \
 	fi
 	@$(ECHO) "## Done\n#####\n"
 
@@ -197,21 +176,3 @@ set-verbosity:
 	@read n; \
 	$(EEECHO) "## Updating Makefile\n"; \
 	sed -i "0,/VERBOSITY/{s/VERBOSITY .*/VERBOSITY = $$n/}" Makefile
-
-## Pull Go libraries into Vendor
-vendor:
-	@$(ECHO) "\n## $(Name) Vendor\n#####\n"
-	@$(MKDIR) $(Lib)
-	@$(ECHO) "Library will be vendored into: "
-	@$(ECHO) "\t$(LIB)\n"
-	@$(PRINT) "go get: "
-	@read n; git submodule add "https://$$n" "lib/src/$$n"
-	@$(ECHO) "\n## Done\n#####\n"
-
-## Update all Vendor libraries
-vendor-update:
-	@$(ECHO) "\n## $(Name) Vendor Update\n#####\n"
-	@$(EEECHO) "\n####\n!! WARNING !!\n####\nThis may break your code\n\n"
-	@$(EECHO) "## Updating all vendors to latest commits...\n"
-	@git submodule -q foreach git pull -q origin master
-	@$(ECHO) "\n## Done\n#####\n"
